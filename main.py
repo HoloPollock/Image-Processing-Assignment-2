@@ -4,6 +4,9 @@
 #
 # Use Python 2.7 with these packages: numpy, PyOpenGL, Pillow
 
+## Quinn Pollock 20018131
+## Jack Guinane 20018078
+
 import sys, os, math, pprint
 
 import numpy as np
@@ -138,7 +141,7 @@ def compute():
             max = pixel
   max = np.sqrt(np.real(max)**2 + np.imag(max)**2)
   print max
-  filter_max = max * 0.4
+  filter_max = max * 0.13
   print filter_max
   
   
@@ -147,12 +150,14 @@ def compute():
 #   Zero the components that are less than 40% of the max
 
   print '3. removing low-magnitude components'
-  image_y = np.copy(actualimage_ft)
-  image_x = np.copy(actualimage_ft)
+  # create copy of image to find dots
+  image_copy = np.copy(actualimage_ft)
   
+  # Get the half the size of the image for for loop as image is centred at 0 
   val_x = getSize(actualimage_ft)[0]
   val_y = getSize(actualimage_ft)[1]
-  print val_y
+#   print val_y
+  # if either x dimension or y dimension was odd add 1 to it so you dont skip the edge
   if val_x[1] == 1:
     range_x = val_x[0] + 1
   else:
@@ -163,61 +168,63 @@ def compute():
   else:
     range_y = val_y[0]
 
-  print range_y
+#   print range_y
   
+  # for loop through image to remove all thing less the filter_max
   for i in range(-range_x,range_x):
     for j in range(-range_y,range_y):
-      if getMaginitude(actualimage_ft[i][j]) < filter_max:
+      if abs(i) > 50 or abs(j) > 50:
+        actualimage_ft[i][j] = actualimage_ft[i][j] * 0.5
+      elif abs(i) > 100 or abs(j) > 100:
         actualimage_ft[i][j] = 0
   gridImageFT = np.copy(np.transpose(actualimage_ft))
   if gridImageFT is None:
     gridImageFT = np.zeros( (height,width), dtype=np.complex_ )
  
-
+ 
   print '4. finding angles and distances of grid lines'
-  ## get y angle
+
+  # list of all high magnitudes points
+  list_of_all = []
+  # get all dots from image in to a list to find angle and distance
+  for i in range(-range_x,range_x):
+    for j in range(-range_y,range_y):
+      if getMaginitude(image_copy[i][j]) >= filter_max:
+         list_of_all.append((j,i))
+      
+  # get the max point in x-axis and y-axis    
+  y_max = (0,0)
+  x_max = (0,0)  
+  for i in list_of_all:
+    if y_max[0] < i[0]:
+      y_max = i
+    if x_max[1] < i[1]:
+      x_max = i
+  
+  # the angle is the line drawn from the max-point to the center
+  # this is found using arctan
+  angle_x = np.arctan2(x_max[0],x_max[1]) * 180 / np.pi
+  angle_y = np.arctan2(y_max[0],y_max[1]) * 180 / np.pi
+
+  # list of points on the y-axis (used to find distance)
   list_of_locy = []
-  for i in range(range_x):
-    for j in range(-range_y+1,0):
-      if not (getMaginitude(image_y[i][j]) < filter_max):
-        if j != 0 and i != 0:
-            list_of_locy.append((j,i))
-  print list_of_locy
-  thing = map(np.array, zip(*list_of_locy))
-  x = np.max(thing[0])
-  print(x)
-#   print thing
-  
-  print list_of_locy
-  angle_y = avg([np.arctan2(i[1],i[0]) * 180 / np.pi for i in list_of_locy]) 
-  ## get y angle
+  # list of points on the x-axis
   list_of_locx = []
-  for i in range(range_x):
-    for j in range(0,range_y):
-      if not (getMaginitude(image_x[i][j]) < filter_max):
-        if j != 0 and i != 0:
-            list_of_locx.append((j,i))
-  print list_of_locx
-  thing = map(np.array, zip(*list_of_locx))
-  x = np.max(thing[0])
-  print(x)
-#   print thing
   
-  print list_of_locx
-  angle_x = avg([np.arctan2(i[1],i[0]) * 180 / np.pi for i in list_of_locx])
+  for i in list_of_all:
+    # all points that are on an angle (to center) within 5 degrees of angle_x are added to x-locations
+    # otherwise add to y-locations
+    if abs((np.arctan2(i[0], i[1]) * 180 / np.pi) - angle_x) > 5:
+      list_of_locy.append(i)
+    else:
+      list_of_locx.append(i)
   
-  # Find (angle, distance) to each peak
-  #
-  # lines = [ (angle1,distance1), (angle2,distance2) ]\
+  # get distances between points for each line
   dis_x = get_avg_distance(list_of_locx)
   dis_y = get_avg_distance(list_of_locy)
-    
-  
-  print dis_x
-  print dis_y
-    
-  lines = [[angle_x,dis_x],[angle_y,dis_y]]
 
+
+  lines = [[angle_x,dis_x],[angle_y,dis_y]]
 
   # Convert back to spatial domain to get a grid-like image
 
@@ -278,10 +285,11 @@ def inverseFT( image ):
 
   return np.fft.ifft2( image )
 
-
+# Get magitude of value from real of and imaginary component
 def getMaginitude(pixel):
   return np.sqrt(np.real(pixel)**2 + np.imag(pixel)**2)
 
+# Get half the size of image and if it was odd in x or y
 def getSize(image):
   x = image.shape[0]
   y = image.shape[1]
@@ -300,37 +308,61 @@ def getSize(image):
     
   return (val_x,val_y)
   
+# Get average of list
 def avg(l):
     if l:
         return sum(l)/len(l)
     return 0
    
-  
+
 def get_avg_distance(lis):
+  
+  # returns average distance between points (tuples) in a list
+  
   count = 0
   total = 0
+  
   for i in range(len(lis)-2):
+    # find distance using pythag-theory (a^2 + b^2 = c^2)
     val = np.sqrt((abs(lis[i][0]-lis[i+1][0]))**2 + (abs(lis[i][1]-lis[i+1][1]))**2)
+    # excludes distances between points that are next to each other
+    # as to not include points that are made out of multipul pixels
     if val > 1.5:
       count += 1
       total += val
+  # avoid divide by zero errors
+  if count == 0:
+    return 0
+  # return average distance
   return total/count
-  
+
+
+
 def get_replace_val(i,j):
+  
+  # get pixel values to fill in broken line
+  # returns the brightest pixel in a 1-pixel neighbourhood, not on a gridline
+
   global gridImage, image
   height = image.shape[0]
-  width  = image.shape[1]  
+  width  = image.shape[1] 
+  
+  # build 1-neighbourhood filter
   line_filter = [(i, j+1), (i+1, j),(i+1, j+1),(i-1, j-1),(i-1, j),(i, j-1),(i+1, j-1),(i-1, j+1)]
+  # remove any pixels outside of image bounds
   line_filter = filter(lambda x: x[0] < height-2 and x[0] > 0 and x[1]< width-2 and x[1] > 0, line_filter)
-#   print height - 2
-#   print line_filter
+  
+  # get all values that are not on the grid
   vals = [image[r[0]][r[1]] for r in line_filter if gridImage[r[0]][r[1]] <= 0.1*255]
-#   print vals
-#   return 0
+  
+  # return 0 if no values found
   if len(vals) == 0:
     return 0 
-  print vals
+    
+  # return brightest pixel in list
   return np.max(vals)
+
+
 
 # Set up the display and draw the current image
 
