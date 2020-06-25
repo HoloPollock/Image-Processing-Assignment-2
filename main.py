@@ -141,7 +141,7 @@ def compute():
             max = pixel
   max = np.sqrt(np.real(max)**2 + np.imag(max)**2)
   print max
-  filter_max = max * 0.13
+  filter_max = max * 0.4
   print filter_max
   
   
@@ -173,9 +173,7 @@ def compute():
   # for loop through image to remove all thing less the filter_max
   for i in range(-range_x,range_x):
     for j in range(-range_y,range_y):
-      if abs(i) > 50 or abs(j) > 50:
-        actualimage_ft[i][j] = actualimage_ft[i][j] * 0.5
-      elif abs(i) > 100 or abs(j) > 100:
+      if getMaginitude(actualimage_ft[i][j]) < filter_max:
         actualimage_ft[i][j] = 0
   gridImageFT = np.copy(np.transpose(actualimage_ft))
   if gridImageFT is None:
